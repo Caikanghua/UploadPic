@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans 
+      xmlns="http://www.springframework.org/schema/beans"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xmlns:context="http://www.springframework.org/schema/context"
+      xmlns:aop="http://www.springframework.org/schema/aop"
+      xmlns:tx="http://www.springframework.org/schema/tx"
+	  xmlns:mvc="http://www.springframework.org/schema/mvc"
+	  xmlns:task="http://www.springframework.org/schema/task"
+      xsi:schemaLocation="
+	
+	  http://www.springframework.org/schema/beans 
+	  http://www.springframework.org/schema/beans/spring-beans-3.0.xsd
+	  
+	  http://www.springframework.org/schema/context
+      http://www.springframework.org/schema/context/spring-context-3.0.xsd
+ 	  
+	  http://www.springframework.org/schema/aop 
+	  http://www.springframework.org/schema/aop/spring-aop-3.0.xsd
+	  
+	  http://www.springframework.org/schema/tx
+      http://www.springframework.org/schema/tx/spring-tx-3.0.xsd
+      http://www.springframework.org/schema/task 
+	  http://www.springframework.org/schema/task/spring-task.xsd
+      http://www.springframework.org/schema/mvc
+      http://www.springframework.org/schema/mvc/spring-mvc-3.0.xsd
+      " default-lazy-init="false">
+      <!-- 启用注解驱动的定时任务 -->
+      <task:annotation-driven/>
+      
+      <!-- 全局异常处理器 -->
+      <context:property-placeholder location="classpath:*.properties" />
+	   	<!-- jredis-->
+		<bean id="jedisClientPool" class="com.readbook.utils.JedisClientPool">
+			<property name="jedisPool" ref="jedisPool"></property>
+		</bean>
+		<bean id="poolConfig" class="redis.clients.jedis.JedisPoolConfig">  
+	        <property name="maxIdle" value="${redis.maxIdle}" />  
+	        <property name="maxTotal" value="${redis.maxActive}" />  
+	        <property name="maxWaitMillis" value="${redis.maxWait}" />  
+	        <property name="testOnBorrow" value="${redis.testOnBorrow}" />  
+	    </bean> 
+		<bean id="jedisPool" class="redis.clients.jedis.JedisPool" destroy-method="destroy" depends-on="poolConfig">
+			<constructor-arg name="host" value="${redis.host}"/>
+			<constructor-arg name="poolConfig" ref="poolConfig"/>
+			<constructor-arg name="port" value="${redis.port}"/>
+			<constructor-arg name="timeout" value="${redis.timeout}"/>
+			<constructor-arg name="password" value="${redis.pass}"/>
+		</bean> 
+      <!-- 配置C3P0连接池,目的：管理数据库连接 -->
+     <!--  <bean id="dataSource" class="com.mchange.v2.c3p0.ComboPooledDataSource">
+      		<property name="driverClass" value="${jdbc.driver}"/>
+      		<property name="jdbcUrl" value="${jdbc.url}"/>
+      		<property name="user" value="${jdbc.username}"/>
+      		<property name="password" value="${jdbc.password}"/>
+      </bean> -->
+	<bean id="dataSource" class="com.alibaba.druid.pool.DruidDataSource"
+		destroy-method="close">
+		<property name="url" value="${jdbc.url}" />
+		<property name="username" value="${jdbc.username}" />
+		<property name="password" value="${jdbc.password}" />
+		<property name="driverClassName" value="${jdbc.driver}" />
+		<property name="connectionInitSqls" value="set names utf8mb4;"/>
+		<property name="maxActive" value="10" />
+		<property name="minIdle" value="5" />
+	</bean>
+      <!-- 配置SqlSessionFactoryBean，目的：加载mybaits配置文件和映射文件，即替代原Mybatis工具类的作用 -->
+      <bean id="sqlSessionFactoryBeanID" class="org.mybatis.spring.SqlSessionFactoryBean">
+      		<property name="configLocation" value="classpath:mybatis.xml"/>
+      		<property name="dataSource" ref="dataSource"/>
+      </bean>
+
+      <!-- 配置Mybatis的事务管理器，即因为Mybatis底层用的是JDBC事务管事器，所以在这里依然配置JDBC事务管理器 -->
+      <bean id="dataSourceTransactionManagerID"  class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+      		<property name="dataSource" ref="dataSource"/>
+      </bean>
+
+      <!-- 配置事务通知，即让哪些方法需要事务支持 -->
+      <tx:advice id="tx" transaction-manager="dataSourceTransactionManagerID">
+      		<tx:attributes>
+      			<tx:method name="*" propagation="REQUIRED"/>
+      		</tx:attributes>
+      </tx:advice>
+
+      <!-- 配置事务切面，即让哪些包下的类需要事务 -->
+      <aop:config>
+      <!-- *号表示任意返回值，（..）表示任意参数 -->
+      		<aop:pointcut id="pointcut" expression="execution(* com.readbook.service.impl.*.*(..))"/>
+     		<aop:advisor advice-ref="tx" pointcut-ref="pointcut"/>
+      </aop:config>
+      
+      <!-- 可以扫描包 -->
+     <context:component-scan base-package="com.readbook.*"/>
+     
+	 <bean class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+		<property name="basePackage" value="com.readbook.mapper" />
+	 </bean>
+	  <!-- 通知springioc容器这些注解的作用 -->
+      <context:annotation-config/>
+      
+      <bean class="org.springframework.web.servlet.view.InternalResourceViewResolver">
+      		<property name="prefix" value="/jsp/"/>
+      		<property name="suffix" value=".jsp"/>
+      </bean>
+     
+      
+      <!-- 配置资源映射 -->
+	
+      <!-- springmvc返回json数据 -->
+     <bean id="messageAdapter" class="org.springframework.web.servlet.mvc.annotation.AnnotationMethodHandlerAdapter">  
+       <property name="messageConverters">  
+           <list>  
+               <!-- Support JSON -->   
+               <bean class="org.springframework.http.converter.json.MappingJacksonHttpMessageConverter"/>  
+           </list>  
+       </property>  
+   </bean>  
+    <bean id="exceptionMessageAdapter" class="org.springframework.web.servlet.mvc.annotation.AnnotationMethodHandlerExceptionResolver">  
+       <property name="messageConverters">  
+           <list>  
+              <!--  Support JSON   --> 
+               <bean class="org.springframework.http.converter.json.MappingJacksonHttpMessageConverter"/>  
+           </list>  
+       </property>  
+   </bean> 
+   <!-- 定义文件解释器 -->  
+	<bean id="multipartResolver" class="org.springframework.web.multipart.commons.CommonsMultipartResolver">    
+	    <!-- 设置默认编码 -->  
+	    <property name="defaultEncoding" value="utf-8"></property>  
+	    <!-- 上传图片最大大小5M-->   
+	    <property name="maxUploadSize" value="5242440"></property>    
+	</bean>  
+</beans>
+      
+      
+      
+      
+      
+      
+      
+      
